@@ -4,15 +4,18 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/WLOrion/sula-flow/internal/adapters"
-	"github.com/WLOrion/sula-flow/internal/core/usecase"
-	httpp "github.com/WLOrion/sula-flow/internal/ports/http"
+	"github.com/WLOrion/sula-flow/internal/country"
+	router "github.com/WLOrion/sula-flow/internal/ports/http"
 )
 
 func main() {
-	scraper := adapters.NewTransfermarktScraper()
-	scrapeUC := usecase.NewScrapeUC(scraper)
-	handler := httpp.NewRouter(scrapeUC)
+	// Carrega CSV de países
+	countries, err := country.LoadCountries("docs/csv/countries.csv")
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	handler := router.NewRouter(countries)
 
 	server := &http.Server{
 		Addr:    ":8080",

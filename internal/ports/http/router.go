@@ -1,40 +1,52 @@
-package http
+package router
 
 import (
 	"encoding/json"
 	"net/http"
 	"strconv"
 
+	"github.com/WLOrion/sula-flow/internal/adapters"
 	"github.com/WLOrion/sula-flow/internal/core/usecase"
+	"github.com/WLOrion/sula-flow/internal/country"
 )
 
-type HTTPHandler struct {
-	ScrapeUC *usecase.ScrapeUC
-}
+func NewRouter(countries *country.Country) http.Handler {
+	mux := http.NewServeMux()
 
-func NewRouter(scrapeUC *usecase.ScrapeUC) *HTTPHandler {
-	return &HTTPHandler{ScrapeUC: scrapeUC}
-}
+	// Cria instâncias do scraper e do repositório
+	scraper := adapters.NewTransfermarktScraper()
+	repo := adapters.NewJSONRepository()
+	transferUC := usecase.NewTransferUsecase(scraper, repo, countries)
 
-func (h *HTTPHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	params := usecase.ScrapeParams{
-		Region:   r.URL.Query().Get("region"),
-		FromYear: parseInt(r.URL.Query().Get("from"), 2023),
-		ToYear:   parseInt(r.URL.Query().Get("to"), 2023),
-	}
+	mux.HandleFunc("/transfers", func(w http.ResponseWriter, r *http.Request) {
+		countryIDStr := r.URL.Query().Get("country_id")
+		countryID, err := strconv.Atoi(countryIDStr)
+		if err != nil {
+			http.Error(w, "Invalid country_id", http.StatusBadRequest)
+			return
+		}
 
-	transfers, err := h.ScrapeUC.Execute(params)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+		// Valida se o country_id existe
+		if _, err := countries.NameByID(countryID); err != nil {
+			http.Error(w, "Country not found", http.StatusNotFound)
+			return
+		}
 
-	json.NewEncoder(w).Encode(transfers)
-}
+		fromYearStr := r.URL.Query().Get("from")
+		toYearStr := r.URL.Query().Get("to")
 
-func parseInt(s string, fallback int) int {
-	if v, err := strconv.Atoi(s); err == nil {
-		return v
-	}
-	return fallback
+		fromYear, _ := strconv.Atoi(fromYearStr)
+		toYear, _ := strconv.Atoi(toYearStr)
+
+		transfers, err := transferUC.GetTransfers(countryID, fromYear, toYear)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(transfers)
+	})
+
+	return mux
 }

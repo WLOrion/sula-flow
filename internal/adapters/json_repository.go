@@ -3,22 +3,46 @@ package adapters
 import (
 	"encoding/json"
 	"os"
-
-	"github.com/WLOrion/sula-flow/internal/domain"
+	"path/filepath"
 )
 
-type JSONRepository struct {
-	FilePath string
+type JSONRepository interface {
+	Save(path string, data interface{}) error
+	Load(path string, dest interface{}) error
 }
 
-func NewJSONRepository(path string) *JSONRepository {
-	return &JSONRepository{FilePath: path}
+type jsonRepository struct{}
+
+func NewJSONRepository() JSONRepository {
+	return &jsonRepository{}
 }
 
-func (r *JSONRepository) Save(transfers []domain.Player) error {
-	data, err := json.MarshalIndent(transfers, "", "  ")
+// Salva os dados em JSON criando diretórios se necessário
+func (r *jsonRepository) Save(path string, data interface{}) error {
+	dir := filepath.Dir(path)
+	if err := os.MkdirAll(dir, os.ModePerm); err != nil {
+		return err
+	}
+
+	file, err := os.Create(path)
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(r.FilePath, data, 0644)
+	defer file.Close()
+
+	encoder := json.NewEncoder(file)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(data)
+}
+
+// Carrega dados de um arquivo JSON
+func (r *jsonRepository) Load(path string, dest interface{}) error {
+	file, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	decoder := json.NewDecoder(file)
+	return decoder.Decode(dest)
 }

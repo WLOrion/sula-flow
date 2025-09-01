@@ -12,7 +12,7 @@ import (
 )
 
 type IScraper interface {
-	Scrape(region string, fromYear, toYear int) ([]domain.Player, error)
+	Scrape(region string, countryID, year int) ([]domain.Player, error)
 }
 
 type TransfermarktScraper struct{}
@@ -21,20 +21,37 @@ func NewTransfermarktScraper() IScraper {
 	return &TransfermarktScraper{}
 }
 
-func (s *TransfermarktScraper) Scrape(region string, fromYear, toYear int) ([]domain.Player, error) {
+func (s *TransfermarktScraper) Scrape(region string, countryID, year int) ([]domain.Player, error) {
 	players := []domain.Player{}
+	var lastFirstPlayerID int64
 
-	for year := fromYear; year <= toYear; year++ {
-		url := fmt.Sprintf("https://www.transfermarkt.com/transfers/saisontransfers/statistik/top/plus/1/galerie/0?saison_id=%d&transferfenster=alle&land_id=26&ausrichtung=&spielerposition_id=&altersklasse=&leihe=", year)
+	for page := 1; page <= 75; page++ {
+		fmt.Println("Scraping page:", page)
+		url := fmt.Sprintf("https://www.transfermarkt.com/transfers/saisontransfers/statistik/top/plus/1/galerie/0?saison_id=%d&transferfenster=alle&land_id=%d&ausrichtung=&spielerposition_id=&altersklasse=&leihe=&page=%d", year, countryID, page)
 		doc, err := fetchDocument(url)
 		if err != nil {
 			return nil, err
 		}
 
-		doc.Find("table.items tbody tr").Each(func(_ int, row *goquery.Selection) {
+		stopPage := false
+		iter := doc.Find("table.items tbody tr").EachIter()
+
+		numOfPlayersBefore := 0
+
+		iter(func(idx int, row *goquery.Selection) bool {
 			cols := row.Find("td")
 			if cols.Length() < 17 {
-				return
+				return true
+			}
+
+			// Checar jogador repetido na primeira linha
+			if idx == 0 {
+				firstPlayerOnPage, _ := strconv.ParseInt(cols.Eq(0).Text(), 10, 64)
+				if firstPlayerOnPage == lastFirstPlayerID {
+					stopPage = true
+					return false
+				}
+				lastFirstPlayerID = firstPlayerOnPage
 			}
 
 			// PLAYER
@@ -49,8 +66,7 @@ func (s *TransfermarktScraper) Scrape(region string, fromYear, toYear int) ([]do
 							parts := strings.Split(href, "/")
 							if len(parts) > 0 {
 								idStr := parts[len(parts)-1]
-								idInt, _ := strconv.Atoi(idStr)
-								playerID = idInt
+								playerID, _ = strconv.Atoi(idStr)
 							}
 							playerName = strings.TrimSpace(link.Text())
 						}
@@ -59,7 +75,7 @@ func (s *TransfermarktScraper) Scrape(region string, fromYear, toYear int) ([]do
 			})
 
 			if playerID == 0 || playerName == "" {
-				return
+				return true
 			}
 
 			// FROM CLUB
@@ -112,7 +128,13 @@ func (s *TransfermarktScraper) Scrape(region string, fromYear, toYear int) ([]do
 					Season: fmt.Sprintf("%d/%d", year, year+1),
 				},
 			})
+
+			return true
 		})
+
+		if stopPage || numOfPlayersBefore == len(players) {
+			break
+		}
 	}
 
 	return players, nil
@@ -123,7 +145,7 @@ func parseFee(feeText string) (float64, bool) {
 	isLoan := false
 
 	switch {
-	case feeTextLower == "" || feeTextLower == "-":
+	case feeTextLower == "" || feeTextLower == "-" || feeTextLower == "?":
 		return 0, false
 	case strings.Contains(feeTextLower, "free transfer"):
 		return 0, false
