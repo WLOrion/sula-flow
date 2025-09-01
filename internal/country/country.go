@@ -9,63 +9,75 @@ import (
 )
 
 type Country struct {
-	idToName map[int]string
-	nameToID map[string]int
+	ID        int
+	Name      string
+	Continent string
 }
 
-// Carrega o CSV e retorna um objeto Country
-func LoadCountries(path string) (*Country, error) {
-	file, err := os.Open(path)
+type CountryStore struct {
+	byID   map[int]Country
+	byName map[string]Country
+}
+
+func LoadCountries(csvPath string) (*CountryStore, error) {
+	file, err := os.Open(csvPath)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open countries CSV: %w", err)
 	}
 	defer file.Close()
 
 	reader := csv.NewReader(file)
+	reader.TrimLeadingSpace = true
+
 	records, err := reader.ReadAll()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to read countries CSV: %w", err)
 	}
 
-	idToName := make(map[int]string)
-	nameToID := make(map[string]int)
+	byID := make(map[int]Country)
+	byName := make(map[string]Country)
 
-	for i, row := range records {
-		if i == 0 {
-			continue // pula header
-		}
-		if len(row) < 2 {
+	for _, row := range records {
+		if len(row) < 3 {
 			continue
 		}
-		id, err := strconv.Atoi(strings.TrimSpace(row[0]))
+
+		id, err := strconv.Atoi(row[0])
 		if err != nil {
 			continue
 		}
-		name := strings.TrimSpace(row[1])
-		idToName[id] = name
-		nameToID[strings.ToLower(name)] = id
+
+		name := sanitizeName(row[1])
+		continent := row[2]
+
+		country := Country{
+			ID:        id,
+			Name:      row[1],
+			Continent: continent,
+		}
+
+		byID[id] = country
+		byName[name] = country
 	}
 
-	return &Country{
-		idToName: idToName,
-		nameToID: nameToID,
-	}, nil
+	return &CountryStore{byID: byID, byName: byName}, nil
 }
 
-// Retorna o nome do país dado o ID
-func (c *Country) NameByID(id int) (string, error) {
-	name, ok := c.idToName[id]
-	if !ok {
-		return "", fmt.Errorf("country ID %d not found", id)
-	}
-	return name, nil
+func (cs *CountryStore) GetByID(id int) (string, bool) {
+	c, ok := cs.byID[id]
+	return c.Name, ok
 }
 
-// Retorna o ID do país dado o nome
-func (c *Country) IDByName(name string) (int, error) {
-	id, ok := c.nameToID[strings.ToLower(name)]
-	if !ok {
-		return 0, fmt.Errorf("country name %s not found", name)
-	}
-	return id, nil
+func (cs *CountryStore) GetByName(name string) (int, bool) {
+	c, ok := cs.byName[sanitizeName(name)]
+	return c.ID, ok
+}
+
+func (cs *CountryStore) GetContByName(name string) (string, bool) {
+	c, ok := cs.byName[sanitizeName(name)]
+	return c.Continent, ok
+}
+
+func sanitizeName(name string) string {
+	return strings.ToLower(strings.TrimSpace(name))
 }

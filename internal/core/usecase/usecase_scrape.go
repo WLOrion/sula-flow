@@ -11,42 +11,39 @@ import (
 )
 
 type TransferUsecase struct {
-	scraper   adapters.IScraper
-	jsonRepo  adapters.JSONRepository
-	countries *country.Country
+	scraper      adapters.IScraper
+	jsonRepo     adapters.JSONRepository
+	countryStore *country.CountryStore
 }
 
-func NewTransferUsecase(scraper adapters.IScraper, jsonRepo adapters.JSONRepository, countries *country.Country) *TransferUsecase {
+func NewTransferUsecase(scraper adapters.IScraper, jsonRepo adapters.JSONRepository, cs *country.CountryStore) *TransferUsecase {
 	return &TransferUsecase{
-		scraper:   scraper,
-		jsonRepo:  jsonRepo,
-		countries: countries,
+		scraper:      scraper,
+		jsonRepo:     jsonRepo,
+		countryStore: cs,
 	}
 }
 
 func (uc *TransferUsecase) GetTransfers(countryID, fromYear, toYear int) ([]domain.Player, error) {
-	region, err := uc.countries.NameByID(countryID)
-	if err != nil {
-		return nil, err
+	country, ok := uc.countryStore.GetByID(countryID)
+	if !ok {
+		return nil, fmt.Errorf("invalid country id %d", countryID)
 	}
 
-	// Formata o nome do país para path seguro
-	regionPath := sanitizeName(region)
-
+	countryPath := sanitizeName(country)
 	allPlayers := []domain.Player{}
 
 	for year := fromYear; year <= toYear; year++ {
 		fmt.Printf("============== %d ==============\n", year)
 
-		players, err := uc.scraper.Scrape(region, countryID, year)
+		players, err := uc.scraper.Scrape(country, countryID, year)
 		if err != nil {
 			return nil, err
 		}
 
 		allPlayers = append(allPlayers, players...)
 
-		// Salva JSON por ano
-		path := filepath.Join("transfers", regionPath, fmt.Sprintf("transfer_%s_%d.json", regionPath, year))
+		path := filepath.Join("transfers", countryPath, fmt.Sprintf("transfer_%s_%d.json", countryPath, year))
 		if err := uc.jsonRepo.Save(path, players); err != nil {
 			return nil, err
 		}

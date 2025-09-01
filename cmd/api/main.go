@@ -9,13 +9,12 @@ import (
 )
 
 func main() {
-	// Carrega CSV de países
-	countries, err := country.LoadCountries("docs/csv/countries.csv")
+	countryStore, err := country.LoadCountries("docs/csv/countries.csv")
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalf("failed to load countries: %v", err)
 	}
 
-	handler := router.NewRouter(countries)
+	handler := router.NewRouter(countryStore)
 
 	server := &http.Server{
 		Addr:    ":8080",

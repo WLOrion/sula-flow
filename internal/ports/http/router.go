@@ -10,33 +10,41 @@ import (
 	"github.com/WLOrion/sula-flow/internal/country"
 )
 
-func NewRouter(countries *country.Country) http.Handler {
+func NewRouter(cs *country.CountryStore) http.Handler {
 	mux := http.NewServeMux()
 
-	// Cria instâncias do scraper e do repositório
 	scraper := adapters.NewTransfermarktScraper()
 	repo := adapters.NewJSONRepository()
-	transferUC := usecase.NewTransferUsecase(scraper, repo, countries)
+
+	transferUC := usecase.NewTransferUsecase(scraper, repo, cs)
 
 	mux.HandleFunc("/transfers", func(w http.ResponseWriter, r *http.Request) {
 		countryIDStr := r.URL.Query().Get("country_id")
 		countryID, err := strconv.Atoi(countryIDStr)
 		if err != nil {
-			http.Error(w, "Invalid country_id", http.StatusBadRequest)
-			return
-		}
-
-		// Valida se o country_id existe
-		if _, err := countries.NameByID(countryID); err != nil {
-			http.Error(w, "Country not found", http.StatusNotFound)
+			http.Error(w, "invalid country id", http.StatusBadRequest)
 			return
 		}
 
 		fromYearStr := r.URL.Query().Get("from")
-		toYearStr := r.URL.Query().Get("to")
-
 		fromYear, _ := strconv.Atoi(fromYearStr)
+		if err != nil {
+			http.Error(w, "invalid from year", http.StatusBadRequest)
+			return
+		}
+
+		toYearStr := r.URL.Query().Get("to")
 		toYear, _ := strconv.Atoi(toYearStr)
+		if err != nil {
+			http.Error(w, "invalid to year", http.StatusBadRequest)
+			return
+		}
+
+		_, ok := cs.GetByID(countryID)
+		if !ok {
+			http.Error(w, "country not found", http.StatusNotFound)
+			return
+		}
 
 		transfers, err := transferUC.GetTransfers(countryID, fromYear, toYear)
 		if err != nil {
