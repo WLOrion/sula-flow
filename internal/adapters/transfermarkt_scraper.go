@@ -57,12 +57,14 @@ func (s *TransfermarktScraper) Scrape(region string, countryID, year int) ([]dom
 			// PLAYER
 			playerID := 0
 			playerName := ""
+			playerUrl := ""
 			cols.Eq(1).Find("table.inline-table tbody tr").Each(func(i int, tr *goquery.Selection) {
 				if i == 0 {
 					link := tr.Find("td.hauptlink a")
 					if link.Length() > 0 {
 						href, exists := link.Attr("href")
 						if exists {
+							playerUrl = fmt.Sprintf("https://www.transfermarkt.com%s", href)
 							parts := strings.Split(href, "/")
 							if len(parts) > 0 {
 								idStr := parts[len(parts)-1]
@@ -80,6 +82,7 @@ func (s *TransfermarktScraper) Scrape(region string, countryID, year int) ([]dom
 
 			// FROM CLUB
 			fromClub := domain.Club{}
+
 			cols.Eq(10).Find("td.hauptlink a").Each(func(_ int, a *goquery.Selection) {
 				href, exists := a.Attr("href")
 				if exists {
@@ -93,6 +96,13 @@ func (s *TransfermarktScraper) Scrape(region string, countryID, year int) ([]dom
 					}
 				}
 				fromClub.ClubName = strings.TrimSpace(a.Text())
+			})
+
+			cols.Eq(11).Find("td img.flaggenrahmen").Each(func(_ int, a *goquery.Selection) {
+				title, exists := a.Attr("title")
+				if exists {
+					fromClub.Country = title
+				}
 			})
 
 			// TO CLUB
@@ -112,6 +122,13 @@ func (s *TransfermarktScraper) Scrape(region string, countryID, year int) ([]dom
 				toClub.ClubName = strings.TrimSpace(a.Text())
 			})
 
+			cols.Eq(15).Find("td img.flaggenrahmen").Each(func(_ int, a *goquery.Selection) {
+				title, exists := a.Attr("title")
+				if exists {
+					toClub.Country = title
+				}
+			})
+
 			// FEE
 			feeText := strings.TrimSpace(cols.Eq(16).Text())
 			fee, isLoan := parseFee(feeText)
@@ -119,6 +136,7 @@ func (s *TransfermarktScraper) Scrape(region string, countryID, year int) ([]dom
 			players = append(players, domain.Player{
 				PlayerID:    playerID,
 				PlayerName:  playerName,
+				PlayerUrl:   playerUrl,
 				Nationality: region,
 				Transfer: domain.Transfer{
 					From:   fromClub,
