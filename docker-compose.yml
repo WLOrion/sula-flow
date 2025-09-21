@@ -1,0 +1,28 @@
+services:
+  memgraph:
+    image: memgraph/memgraph-mage:latest
+    container_name: memgraph
+    ports:
+      - "7687:7687"
+    networks:
+      - memgraph-net
+    volumes:
+      - ./docs/csv:/import
+    command: ["--query-modules-directory=/usr/lib/memgraph/query_modules"]
+
+  memgraph-lab:
+    image: memgraph/lab:latest
+    container_name: memgraph-lab
+    ports:
+      - "3000:3000"
+    networks:
+      - memgraph-net
+    depends_on:
+      - memgraph
+    environment:
+      - MEMGRAPH_HOST=memgraph
+      - MEMGRAPH_PORT=7687
+
+networks:
+  memgraph-net:
+    driver: bridge

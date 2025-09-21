@@ -34,3 +34,8 @@ go.work.sum
 #scraper
 transfers/
 unified_transfers/
+
+#unification
+docs/csv/clubs.csv
+docs/csv/players.csv
+docs/csv/transfers.csv
